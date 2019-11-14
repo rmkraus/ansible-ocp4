@@ -1,0 +1,229 @@
+#!/usr/bin/ansible-playbook
+---
+
+- name: gather variables
+  hosts: ocp4
+  gather_facts: no
+  become: no
+
+  vars_prompt:
+    - name: ocpversion
+      prompt: "OCP Version"
+      default: "4.2.2"
+      type: "String"
+      private: no
+    - name: cosversion
+      prompt: "CoreOS Version"
+      default: "4.2.0"
+      type: "String"
+      private: no
+    - name: clusterid
+      prompt: Cluster ID
+      default: ocp
+      type: "String"
+      private: no
+    - name: basedomain
+      prompt: "Base Domain"
+      default: rmkra.us
+      type: String
+      private: no
+    - name: clustercidr
+      prompt: Cluster Network CIDR
+      default: "10.254.0.0/16"
+      type: String
+      private: no
+    - name: servicecidr
+      prompt: Service Network CIDR
+      default: "172.30.0.0/16"
+      type: String
+      private: no
+    - name: sshpubkey
+      prompt: SSH Public Key
+      default: "~/.ssh/id_rsa.pub"
+      type: String
+      private: no
+    - name: pullsecret
+      prompt: Pull Secret (Get it at https://cloud.redhat.com/openshift)
+      type: String
+      private: no
+    
+  tasks:
+    - delegate_to: localhost
+      run_once: yes
+      block:
+      - name: ensure working directory exists
+        file:
+          path: './build.{{ clusterid }}'
+          state: directory
+          mode: '0700'
+        delegate_to: localhost
+        run_once: yes
+        tags:
+          - always
+
+      - name: gather answers
+        set_fact:
+          answers: 
+            ocpversion: "{{ ocpversion }}"
+            cosversion: "{{ cosversion }}"
+            clusterid: "{{ clusterid }}"
+            basedomain: "{{ basedomain }}"
+            clustercidr: "{{ clustercidr }}"
+            servicecidr: "{{ servicecidr }}"
+            sshpubkey: "{{ sshpubkey }}"
+            pullsecret: "{{ pullsecret }}"
+        tags:
+          - always
+
+      - name: save answers file
+        copy:
+          content: "{{ answers | to_nice_yaml(width=80, indent=2) }}"
+          dest: "./build.{{ clusterid }}/answers.yaml"
+        tags:
+          - always
+
+      - name: store install facts
+        set_fact:
+          working_dir: "./build.{{ clusterid }}"
+          openshift_install: "./build.{{ clusterid }}/openshift-install"
+          install_config_yaml: "./build.{{ clusterid }}/install-config.yaml"
+          ocpversion_split: "{{ ocpversion.split('.') }}"
+        delegate_to: localhost
+        run_once: yes
+        tags:
+          - always
+
+      - name: set coreos facts - 1
+        set_fact:
+          cosversion_split: "{{ cosversion.split('.') }}"
+        tags:
+          - always
+          
+      - name: set coreos facts - 2
+        set_fact:
+          download_url: https://mirror.openshift.com/pub/openshift-v4/dependencies/rhcos/{{ cosversion_split.0 }}.{{ cosversion_split.1 }}/{{ cosversion }}
+        tags:
+          - always
+
+
+- name: generate intallation config
+  hosts: ocp4
+  gather_facts: no
+  become: no
+
+  tasks:
+    - delegate_to: localhost
+      run_once: yes
+      block:
+      - name: download installer and client
+        get_url:
+          url: "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/{{ answers.ocpversion}}/{{ item.src }}"
+          dest: "{{ working_dir }}/{{ item.dest }}" 
+          mode: '0644'
+        loop:
+          - src: openshift-client-linux-{{ answers.ocpversion }}.tar.gz
+            dest: openshift-client-linux.tgz
+          - src: openshift-install-linux-{{ answers.ocpversion }}.tar.gz
+            dest: openshift-install-linux.tgz
+        loop_control:
+          label: "{{ item.src }}"
+        register: pkg_download
+        delegate_to: localhost
+        run_once: yes
+        tags:
+          - generate
+
+      - name: extract installer and client
+        shell: tar xvzf '{{ item.dest }}' -C '{{ working_dir }}'
+        args:
+          warn: no
+        when: item is changed
+        loop: "{{ pkg_download.results }}"
+        loop_control:
+          label: "{{ item.dest }}"
+        delegate_to: localhost
+        run_once: yes
+        tags:
+          - generate
+
+      - name: create install config
+        set_fact:
+          install_config:
+            apiVersion: v1
+            baseDomain: "{{ answers.basedomain }}"
+            compute:
+            - hyperthreading: Enabled
+              name: worker
+              replicas: 0
+            controlPlane:
+              hyperthreading: Enabled
+              name: master
+              replicas: 3
+            metadata:
+              name: "{{ answers.clusterid }}"
+            networking: 
+              clusterNetworks:
+              - cidr: "{{ answers.clustercidr }}"
+                hostPrefix: 24
+              networkType: OpenShiftSDN
+              serviceNetwork:
+              - "{{ answers.servicecidr }}"
+            platform:
+              none: {}
+            pullSecret: "{{ answers.pullsecret | to_json }}"
+            sshKey: "{{ lookup('file', answers.sshpubkey) }}"
+        tags:
+          - generate
+      
+      - name: save install config file
+        copy:
+          content: "{{ install_config | to_nice_yaml(width=80, indent=2) }}"
+          dest: "{{ install_config_yaml }}"
+        tags:
+          - generate
+
+      - name: create ignition-configs
+        shell: >
+          {{ openshift_install }} create ignition-configs 
+          --dir={{ working_dir }}
+        tags:
+          - generate
+
+- name: publish config to data server
+  hosts: data_server
+  gather_facts: no
+  become: yes
+
+  tasks:
+
+    - name: download CoreOS images
+      get_url:
+        url: "{{ download_url }}/{{ item }}"
+        dest: "/var/www/html/{{ item }}"
+        mode: '0644'
+      loop:
+        - rhcos-{{ answers.cosversion }}-x86_64-installer-initramfs.img	
+        - rhcos-{{ answers.cosversion }}-x86_64-installer-kernel
+        - rhcos-{{ answers.cosversion }}-x86_64-metal-bios.raw.gz
+      tags:
+        - publish
+
+    - name: create directory for ignition files
+      file:
+        path: /var/www/html/{{ answers.clusterid }}
+        state: directory
+        mode: "0755"
+      tags:
+        - publish
+
+    - name: publish cluster ignition files
+      copy:
+        src: "{{ working_dir }}/{{ item }}"
+        dest: "/var/www/html/{{ answers.clusterid }}/{{ item }}"
+        mode: "0644"
+      loop:
+        - bootstrap.ign
+        - master.ign
+        - worker.ign
+      tags:
+        - publish

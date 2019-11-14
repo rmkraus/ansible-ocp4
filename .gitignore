@@ -1,0 +1,12 @@
+*.pyo
+*.retry
+*.swp
+tmp
+*.cache
+*.facts
+*.hostcollections
+*.index
+*.params
+.cache
+secrets.yml
+build.*

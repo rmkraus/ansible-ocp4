@@ -1,5 +1,4 @@
-OCP4 Deployer
--------------
+# OCP4 Deployer
 
 These are helper scripts to automate major parts of deploying an UPI OpenShift 4 cluster into an existing environment.
 The purpose of this project is to create a fully functional cluster without duplicating existing core network infrastructure.
@@ -7,19 +6,16 @@ These playbooks will not create the necessary DHCP, DNS, or PXE Boot resources.
 It is expected that these already exist in your infrastructure.
 If you would like to have network infrastructure created in support of your cluster, like in a lab environement, check out [ocp4-upi-helpernode](https://github.com/christianh814/ocp4-upi-helpernode).
 
-1. Setup Data Server
-====================
+## Setup Data Server
 The Data Server should be an existing web server to use for hosting cluster/CoreOS data. 
 Web data should be stored at /var/www/html.
 The CoreOS images and ignition files will be published to this server for use by the cluster.
 One data server can be used for multiple clusters, if that is what your hearts desires.
 
-2. Populate Inventory File
-==========================
+## Populate Inventory File
 Update the inventory file to match your desired deployment. 
 
-3. Run Installation Preparation
-===============================
+## Run Installation Preparation
 This is done with the *prepare.yml* playbook.
 
 ```
@@ -40,11 +36,9 @@ This playbook has a few tags for the different plays in the book:
   - `generate`: These tasks will use the OpenShift installer to generate the installlation configuration.
   - `publish`: These tasks will publish the installation configuration to the data server.
 
-Create the Load Balancers
-=========================
+## Create the Load Balancers
 
-Setup PXE Boot Environment
-==========================
+## Setup PXE Boot Environment
 ```
 <%
     # remote urls for CoreOS resources
@@ -73,18 +67,15 @@ LABEL pxeboot
     APPEND ip=dhcp rd.neednet=1 initrd=<%= initrd %> console=tty0 console=ttyS0 coreos.inst=yes coreos.inst.install_dev=<%= disk %> coreos.inst.image_url=<%= image %> coreos.inst.ignition_url=<%= ign %>
 ```
 
-Boot the Bootstrap Server
-=========================
+## Boot the Bootstrap Server
 The domain name for this server should be `bootstrap.CLUSTERID.example.com`. 
 Forward and reverse DNS lookups must work for this server.
 
-Boot the Master Servers
-=======================
+## Boot the Master Servers
 The domain names for these server should be `master-X.CLUSTERID.example.com`.
 Forward and reverse DNS lookups must work for these servers.
 
-Boot the Worker Servers
-=======================
+## Boot the Worker Servers
 The domain names for these server should be `worker-X.CLUSTERID.example.com`.
 Forward and reverse DNS lookups must work for these servers.
 

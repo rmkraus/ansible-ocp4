@@ -22,6 +22,11 @@
       default: ocp
       type: "String"
       private: no
+    - name: mastercount
+      prompt: Number of Masters
+      default: 3
+      type: "Integer"
+      private: no
     - name: basedomain
       prompt: "Base Domain"
       default: rmkra.us
@@ -46,7 +51,7 @@
       prompt: Pull Secret (Get it at https://cloud.redhat.com/openshift)
       type: String
       private: no
-    
+
   tasks:
     - delegate_to: localhost
       run_once: yes
@@ -63,7 +68,7 @@
 
       - name: gather answers
         set_fact:
-          answers: 
+          answers:
             ocpversion: "{{ ocpversion }}"
             cosversion: "{{ cosversion }}"
             clusterid: "{{ clusterid }}"
@@ -72,6 +77,7 @@
             servicecidr: "{{ servicecidr }}"
             sshpubkey: "{{ sshpubkey }}"
             pullsecret: "{{ pullsecret }}"
+            mastercount: "{{ mastercount }}"
         tags:
           - always
 
@@ -98,7 +104,7 @@
           cosversion_split: "{{ cosversion.split('.') }}"
         tags:
           - always
-          
+
       - name: set coreos facts - 2
         set_fact:
           download_url: https://mirror.openshift.com/pub/openshift-v4/dependencies/rhcos/{{ cosversion_split.0 }}.{{ cosversion_split.1 }}/{{ cosversion }}
@@ -118,7 +124,7 @@
       - name: download installer and client
         get_url:
           url: "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/{{ answers.ocpversion}}/{{ item.src }}"
-          dest: "{{ working_dir }}/{{ item.dest }}" 
+          dest: "{{ working_dir }}/{{ item.dest }}"
           mode: '0644'
         loop:
           - src: openshift-client-linux-{{ answers.ocpversion }}.tar.gz
@@ -146,45 +152,16 @@
         tags:
           - generate
 
-      - name: create install config
-        set_fact:
-          install_config:
-            apiVersion: v1
-            baseDomain: "{{ answers.basedomain }}"
-            compute:
-            - hyperthreading: Enabled
-              name: worker
-              replicas: 0
-            controlPlane:
-              hyperthreading: Enabled
-              name: master
-              replicas: 3
-            metadata:
-              name: "{{ answers.clusterid }}"
-            networking: 
-              clusterNetworks:
-              - cidr: "{{ answers.clustercidr }}"
-                hostPrefix: 24
-              networkType: OpenShiftSDN
-              serviceNetwork:
-              - "{{ answers.servicecidr }}"
-            platform:
-              none: {}
-            pullSecret: "{{ answers.pullsecret | to_json }}"
-            sshKey: "{{ lookup('file', answers.sshpubkey) }}"
-        tags:
-          - generate
-      
-      - name: save install config file
-        copy:
-          content: "{{ install_config | to_nice_yaml(width=80, indent=2) }}"
+      - name: create install config file
+        template:
+          src: install-config.j2
           dest: "{{ install_config_yaml }}"
         tags:
           - generate
 
       - name: create ignition-configs
         shell: >
-          {{ openshift_install }} create ignition-configs 
+          {{ openshift_install }} create ignition-configs
           --dir={{ working_dir }}
         tags:
           - generate
@@ -202,7 +179,7 @@
         dest: "/var/www/html/{{ item }}"
         mode: '0644'
       loop:
-        - rhcos-{{ answers.cosversion }}-x86_64-installer-initramfs.img	
+        - rhcos-{{ answers.cosversion }}-x86_64-installer-initramfs.img
         - rhcos-{{ answers.cosversion }}-x86_64-installer-kernel
         - rhcos-{{ answers.cosversion }}-x86_64-metal-bios.raw.gz
       tags:

@@ -1,0 +1,23 @@
+apiVersion: v1
+baseDomain: "{{ answers.basedomain }}"
+compute:
+- hyperthreading: Enabled
+  name: worker
+  replicas: 0
+controlPlane:
+  hyperthreading: Enabled
+  name: master
+  replicas: {{ answers.mastercount | int }}
+metadata:
+  name: "{{ answers.clusterid }}"
+networking:
+  clusterNetworks:
+  - cidr: "{{ answers.clustercidr }}"
+    hostPrefix: 24
+  networkType: OpenShiftSDN
+  serviceNetwork:
+  - "{{ answers.servicecidr }}"
+platform:
+    none: {}
+pullSecret: '{{ answers.pullsecret | to_json }}'
+sshKey: "{{ lookup('file', answers.sshpubkey) }}"

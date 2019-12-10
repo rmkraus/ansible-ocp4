@@ -7,7 +7,7 @@ compute:
 controlPlane:
   hyperthreading: Enabled
   name: master
-  replicas: {{ answers.mastercount | int }}
+  replicas: {{ groups.controlplane | length }}
 metadata:
   name: "{{ answers.clusterid }}"
 networking:

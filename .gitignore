@@ -9,4 +9,7 @@ tmp
 *.params
 .cache
 secrets.yml
+secrets.yml
+answers.yaml
+answers.yaml
 build.*

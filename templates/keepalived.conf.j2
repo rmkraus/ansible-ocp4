@@ -1,0 +1,13 @@
+vrrp_instance ocp_vip {
+  interface "{{ vip_interface }}"
+  state "{{ keepalive.state }}"
+  virtual_router_id "{{ keepalive.router_id }}"
+  priority "{{ keepalive.priority }}"
+  authentication {
+    auth_type PASS
+    auth_pass "{{ keepalive.password }}"
+  }
+  virtual_ipaddress {
+    {{ vip }}
+  }
+}

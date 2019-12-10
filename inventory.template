@@ -1,0 +1,27 @@
+[controlplane]
+master-0.ocp.example.com
+
+[compute]
+worker-0.ocp.example.com
+worker-1.ocp.example.com
+
+[bootstrapper]
+bootstrap.ocp.example.com
+
+[loadbalancers]
+lb-0.ocp.example.com vip_interface=ens3
+lb-1.ocp.example.com vip_interface=eth0
+[loadbalancers:vars]
+vip=192.168.10.201
+
+[data_server]
+ocp-hub.example.com
+
+[ocp4:children]
+controlplane
+compute
+bootstrapper
+loadbalancers
+data_server
+
+[ocp4:vars]

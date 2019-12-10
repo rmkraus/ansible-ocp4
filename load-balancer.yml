@@ -1,0 +1,95 @@
+#!/usr/bin/ansible-playbook
+---
+- import_playbook: playbooks/parse_answers.yml
+
+- name: create cluster load balancers
+  hosts: loadbalancers
+  become: yes
+  gather_facts: yes
+
+  tasks:
+    - name: install packages
+      yum:
+        name: keepalived, haproxy, libsemanage-python
+        state: installed
+      tags:
+        - loadbalancers
+
+    - name: configure haproxy
+      template:
+        src: templates/haproxy.cfg.j2
+        dest: /etc/haproxy/haproxy.cfg
+      notify: restart haproxy
+      tags:
+        - loadbalancers
+
+    - name: configure haproxy selinux booleans
+      seboolean:
+        name: haproxy_connect_any
+        state: yes
+        persistent: yes
+      ignore_errors: yes
+      tags:
+        - loadbalancers
+
+    - name: create keepalived facts
+      set_fact:
+        keepalive:
+          router_id: "{{ lookup('password', working_dir + '/lb_vip_id chars=digits length=2') }}" 
+          priority: "{{ 100 + idx }}"
+          state: "{{ 'MASTER' if idx == 0 else 'SLAVE' }}"
+          password: "{{ lookup('password', working_dir + '/lb_vip_pass chars=ascii_letters length=8') }}"
+      loop: "{{ groups['loadbalancers'] }}"
+      loop_control:
+        index_var: idx
+      when: item == inventory_hostname 
+      tags:
+        - loadbalancers
+
+    - name: configure keepalived
+      template:
+        src: templates/keepalived.conf.j2
+        dest: /etc/keepalived/keepalived.conf
+        owner: root
+        group: root
+        mode: "0600"
+      notify: restart keepalived
+      tags:
+        - loadbalancers
+
+    - name: start services
+      service:
+        name: "{{ item }}"
+        state: started
+        enabled: yes
+      loop:
+        - keepalived
+        - haproxy
+      tags:
+        - loadbalancers
+
+    - name: open firewall ports
+      firewalld:
+        port: "{{ item }}"
+        permanent: yes
+        immediate: yes
+        state: enabled
+      loop: 
+        - 6443/tcp
+        - 22623/tcp
+        - 80/tcp
+        - 443/tcp
+        - 8080/tcp
+      tags:
+        - loadbalancers
+
+  handlers:
+    - name: restart haproxy
+      service: 
+        name: haproxy
+        state: restarted
+    
+    - name: restart keepalived
+      service:
+        name: keepalived
+        state: restarted

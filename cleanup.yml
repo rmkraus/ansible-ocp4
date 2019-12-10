@@ -1,0 +1,46 @@
+#!/usr/bin/ansible-playbook
+---
+- import_playbook: playbooks/parse_answers.yml
+
+- name: cleanup deployment
+  hosts: localhost
+  become: no
+  gather_facts: no
+
+  tasks:
+    - name: delete install artifacts
+      file:
+        name: "{{ working_dir }}/{{ item }}"
+        state: absent
+      loop:
+        - auth
+        - bootstrap.ign
+        - kubectl
+        - master.ign
+        - metadata.json
+        - oc
+        - openshift-client-linux.tgz
+        - openshift-install
+        - openshift-install-linux.tgz
+        - README.md
+        - worker.ign
+        - .openshift_install.log
+        - .openshift_install_state.json
+        - lb_vip_id
+        - lb_vip_pass
+      tags: cleanup
+
+- name: remove config from data server
+  hosts: data_server
+  gather_facts: no
+  become: yes
+
+  tasks:
+
+    - name: remove directory for ignition files
+      file:
+        path: /var/www/html/{{ answers.clusterid }}
+        state: absent
+      tags:
+        - cleanup
+

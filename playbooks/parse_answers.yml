@@ -1,0 +1,107 @@
+#!/usr/bin/ansible-playbook
+---
+
+- name: gather variables
+  hosts: ocp4,localhost
+  gather_facts: no
+  become: no
+
+  vars_prompt:
+    - name: ocpversion
+      prompt: "OCP Version"
+      default: "4.2.2"
+      type: "String"
+      private: no
+    - name: cosversion
+      prompt: "CoreOS Version"
+      default: "4.2.0"
+      type: "String"
+      private: no
+    - name: clusterid
+      prompt: Cluster ID
+      default: ocp
+      type: "String"
+      private: no
+    - name: basedomain
+      prompt: "Base Domain"
+      default: rmkra.us
+      type: String
+      private: no
+    - name: clustercidr
+      prompt: Cluster Network CIDR
+      default: "10.254.0.0/16"
+      type: String
+      private: no
+    - name: servicecidr
+      prompt: Service Network CIDR
+      default: "172.30.0.0/16"
+      type: String
+      private: no
+    - name: sshpubkey
+      prompt: SSH Public Key
+      default: "~/.ssh/id_rsa.pub"
+      type: String
+      private: no
+    - name: pullsecret
+      prompt: Pull Secret (Get it at https://cloud.redhat.com/openshift)
+      type: String
+      private: no
+
+  tasks:
+
+    - delegate_to: localhost
+      run_once: yes
+      block:
+      - name: ensure working directory exists
+        file:
+          path: '../build.{{ clusterid }}'
+          state: directory
+          mode: '0700'
+        delegate_to: localhost
+        run_once: yes
+        tags:
+          - always
+
+      - name: gather answers
+        set_fact:
+          answers:
+            ocpversion: "{{ ocpversion }}"
+            cosversion: "{{ cosversion }}"
+            clusterid: "{{ clusterid }}"
+            basedomain: "{{ basedomain }}"
+            clustercidr: "{{ clustercidr }}"
+            servicecidr: "{{ servicecidr }}"
+            sshpubkey: "{{ sshpubkey }}"
+            pullsecret: "{{ pullsecret }}"
+        tags:
+          - always
+
+      - name: save answers file
+        copy:
+          content: "{{ answers | to_nice_yaml(width=80, indent=2) }}"
+          dest: "../build.{{ clusterid }}/answers.yaml"
+        tags:
+          - always
+
+      - name: store install facts
+        set_fact:
+          working_dir: "./build.{{ clusterid }}"
+          openshift_install: "./build.{{ clusterid }}/openshift-install"
+          install_config_yaml: "./build.{{ clusterid }}/install-config.yaml"
+          ocpversion_split: "{{ ocpversion.split('.') }}"
+        delegate_to: localhost
+        run_once: yes
+        tags:
+          - always
+
+      - name: set coreos facts - 1
+        set_fact:
+          cosversion_split: "{{ cosversion.split('.') }}"
+        tags:
+          - always
+
+      - name: set coreos facts - 2
+        set_fact:
+          download_url: https://mirror.openshift.com/pub/openshift-v4/dependencies/rhcos/{{ cosversion_split.0 }}.{{ cosversion_split.1 }}/{{ cosversion }}
+        tags:
+          - always
